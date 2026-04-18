@@ -1,6 +1,6 @@
 {
   "name": "lw-audittools",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "面向中国审计实务的 Excel 审计插件",
   "scripts": {
     "dev": "vite",

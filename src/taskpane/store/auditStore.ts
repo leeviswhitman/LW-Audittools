@@ -13,11 +13,25 @@ import type {
   ReconciliationIssue,
   AuditLog,
   MappingConfig,
+  CleaningLogEntry,
 } from '../../models';
 import type { SheetInfo } from '../../excel/ExcelAdapter';
 import type { SheetScanResult } from '../../excel/SheetScanner';
 import type { SamplingResult } from '../../modules/SampleEngine';
 import type { ReconciliationSummary } from '../../modules/ReconciliationEngine';
+
+// ─── 系统设置 ─────────────────────────────────────────────────
+
+export interface AuditSettings {
+  /** 重要性水平（元） */
+  materialityThreshold: number;
+  /** 合计行关键词 */
+  summaryRowKeywords: string[];
+  /** 风险关键词（摘要中出现则为风险分录） */
+  sensitiveKeywords: string[];
+  /** 默认随机种子（null = 不固定） */
+  defaultRandomSeed: number | null;
+}
 
 // ─── 导航页面定义 ───────────────────────────────────────────
 
@@ -71,6 +85,13 @@ export interface AuditStore {
   // ── 日志 ───────────────────────────────────────────────────
   auditLogs: AuditLog[];
 
+  // ── 清洗日志 ───────────────────────────────────────────────
+  cleaningLog: CleaningLogEntry[];
+  cleaningErrors: Array<{ row: number; message: string }>;
+
+  // ── 系统设置 ───────────────────────────────────────────────
+  settings: AuditSettings;
+
   // ── Actions ────────────────────────────────────────────────
   setCurrentPage: (page: NavPage) => void;
   setLoading: (loading: boolean, message?: string) => void;
@@ -88,6 +109,8 @@ export interface AuditStore {
   addSamplingResult: (result: SamplingResult) => void;
   addAuditLog: (log: AuditLog) => void;
   setAuditLogs: (logs: AuditLog[]) => void;
+  setCleaningLog: (log: CleaningLogEntry[], errors: Array<{ row: number; message: string }>) => void;
+  setSettings: (settings: Partial<AuditSettings>) => void;
   reset: () => void;
 }
 
@@ -111,6 +134,14 @@ const initialState = {
   samplingResult: null,
   samplingHistory: [],
   auditLogs: [],
+  cleaningLog: [],
+  cleaningErrors: [],
+  settings: {
+    materialityThreshold: 500000,
+    summaryRowKeywords: ['合计', '小计', '总计', '期末合计', '期初合计', '年合计', 'total', 'subtotal'],
+    sensitiveKeywords: ['返点', '折扣', '佣金', '回扣', '关联', '股东', '补贴', '奖励'],
+    defaultRandomSeed: null,
+  },
 };
 
 export const useAuditStore = create<AuditStore>((set) => ({
@@ -151,6 +182,12 @@ export const useAuditStore = create<AuditStore>((set) => ({
   addAuditLog: (log) =>
     set((state) => ({ auditLogs: [...state.auditLogs, log] })),
   setAuditLogs: (logs) => set({ auditLogs: logs }),
+
+  setCleaningLog: (log, errors) =>
+    set({ cleaningLog: log, cleaningErrors: errors }),
+
+  setSettings: (settings) =>
+    set((state) => ({ settings: { ...state.settings, ...settings } })),
 
   reset: () => set({ ...initialState, projectId: `proj_${Date.now()}` }),
 }));
