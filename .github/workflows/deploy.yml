@@ -1,0 +1,104 @@
+name: 构建并发布
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+
+# 允许 GitHub Pages 部署
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+# 同时只允许一个部署，不取消正在进行的部署
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # ─── 构建 ────────────────────────────────────────────────────
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 构建（生产）
+        run: npm run build
+        env:
+          VITE_BASE_URL: /LW-Audittools/
+
+      # 将 manifest.prod.xml 一并放入 dist，方便 Pages 访问
+      - name: 拷贝生产 manifest 到 dist
+        run: cp manifest.prod.xml dist/manifest.xml
+
+      - name: 上传 Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  # ─── 部署到 GitHub Pages（每次推送 main 或 tag 均执行）─────────
+  deploy-pages:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # ─── 创建 Release（仅在推送 tag 时执行）──────────────────────
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "LW 审计工具箱 ${{ github.ref_name }}"
+          body: |
+            ## LW 审计工具箱 ${{ github.ref_name }}
+
+            ### 安装方法（一键旁加载）
+
+            1. 下载下方附件中的 `manifest.xml`
+            2. 打开 **Excel**（桌面版，需要联网）
+            3. 依次点击：**文件 → 选项 → 信任中心 → 信任中心设置 → 受信任的加载项目录**
+               - 或者使用旁加载快捷方式（见 README 详细说明）
+            4. 在 Excel 的"开发工具"选项卡 → **Office 加载项 → 管理我的加载项 → 上传我的加载项**，选择下载的 `manifest.xml`
+            5. 插件加载后，在"开始"选项卡中会出现 **"LW 审计工具"** 按钮组，点击"打开审计工具箱"即可使用
+
+            > 插件前端托管于 GitHub Pages，无需本地服务器，保持联网即可使用。
+
+            ### 功能列表
+
+            | 模块 | 说明 |
+            |------|------|
+            | 项目概览 | 设置客户/期间/操作者，查看数据统计 |
+            | 数据导入 | 扫描工作簿，识别序时账与科目余额表 |
+            | 一键抽凭 | 系统抽样 / 货币单元抽样 / 随机抽样 |
+            | 勾稽校验 | 验证序时账与余额表借贷平衡 |
+            | 底稿输出 | 输出审计底稿到新工作表 |
+            | 审计日志 | 全程操作留痕，支持导出 |
+
+            完整使用说明请查阅 [README](https://github.com/leeviswhitman/LW-Audittools/blob/main/README.md)。
+          files: manifest.prod.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
