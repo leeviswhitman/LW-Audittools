@@ -32,6 +32,36 @@ const MIME = {
   '.map': 'application/json',
 };
 
+/**
+ * Build an index of every file under `dir`, keyed by its URL path.
+ * File system paths in the index are derived from trusted directory traversal
+ * (not from user input), so requests are resolved via Map lookup only.
+ */
+function buildFileIndex(dir) {
+  const index = new Map();
+  function walk(fsDir, urlBase) {
+    for (const entry of fs.readdirSync(fsDir, { withFileTypes: true })) {
+      const fsPath = path.join(fsDir, entry.name);
+      const urlKey = urlBase + '/' + entry.name;
+      if (entry.isDirectory()) {
+        walk(fsPath, urlKey);
+      } else {
+        index.set(urlKey, fsPath);
+      }
+    }
+  }
+  walk(dir, '');
+  return index;
+}
+
+if (!fs.existsSync(DIST)) {
+  console.error('错误：dist/ 目录不存在。请先解压发布包，确保 dist/ 和 server.js 在同一目录。');
+  process.exit(1);
+}
+
+// Build the index once at startup; file paths come from the filesystem, not user input.
+const FILE_INDEX = buildFileIndex(DIST);
+
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
@@ -42,38 +72,21 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  let urlPath = (req.url || '/').split('?')[0];
-  if (urlPath === '/') urlPath = '/src/taskpane/index.html';
+  const urlPath = (req.url || '/').split('?')[0];
+  const lookupKey = urlPath === '/' ? '/src/taskpane/index.html' : urlPath;
 
-  // Sanitize: reject any path containing traversal sequences or non-printable chars
-  if (/\.\./.test(urlPath) || /[^\x20-\x7E]/.test(urlPath)) {
-    res.writeHead(400);
-    res.end('Bad Request');
+  // Resolve the file path exclusively from the pre-built index (no user data in fs calls).
+  const filePath = FILE_INDEX.get(lookupKey);
+  if (!filePath) {
+    res.writeHead(404);
+    res.end('Not Found');
     return;
   }
 
-  // Strip leading slashes and resolve the final path
-  const filePath = path.resolve(DIST, urlPath.replace(/^\/+/, ''));
-
-  // Containment check: ensure the resolved path stays inside DIST
-  if (filePath !== DIST && !filePath.startsWith(DIST + path.sep)) {
-    res.writeHead(403);
-    res.end('Forbidden');
-    return;
-  }
-
-  fs.stat(filePath, (err, stat) => {
-    if (err || !stat.isFile()) {
-      res.writeHead(404);
-      res.end('Not Found: ' + urlPath);
-      return;
-    }
-
-    const ext = path.extname(filePath).toLowerCase();
-    const contentType = MIME[ext] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': contentType });
-    fs.createReadStream(filePath).pipe(res);
-  });
+  const ext = path.extname(filePath).toLowerCase();
+  const contentType = MIME[ext] || 'application/octet-stream';
+  res.writeHead(200, { 'Content-Type': contentType });
+  fs.createReadStream(filePath).pipe(res);
 });
 
 server.listen(PORT, '127.0.0.1', () => {
