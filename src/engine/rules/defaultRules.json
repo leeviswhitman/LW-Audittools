@@ -1,0 +1,266 @@
+[
+  {
+    "ruleId": "FI-001",
+    "ruleName": "凭证号完整性校验",
+    "ruleCategory": "field_integrity",
+    "description": "序时账中凭证号不能为空或全空格",
+    "applicableDataType": "journal",
+    "condition": {
+      "field": "voucherNo",
+      "operator": "isEmpty"
+    },
+    "severity": "error",
+    "outputAction": "flag_anomaly",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "FI-002",
+    "ruleName": "科目编码完整性校验",
+    "ruleCategory": "field_integrity",
+    "description": "序时账中科目编码不能为空",
+    "applicableDataType": "journal",
+    "condition": {
+      "field": "accountCode",
+      "operator": "isEmpty"
+    },
+    "severity": "error",
+    "outputAction": "flag_anomaly",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "FI-003",
+    "ruleName": "摘要过短警告",
+    "ruleCategory": "field_integrity",
+    "description": "摘要长度少于2个字符，可能信息不足",
+    "applicableDataType": "journal",
+    "condition": {
+      "field": "summary",
+      "operator": "lengthLessThan",
+      "value": 2
+    },
+    "severity": "warning",
+    "outputAction": "flag_anomaly",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "FI-004",
+    "ruleName": "余额表科目编码必填",
+    "ruleCategory": "field_integrity",
+    "description": "科目余额表中科目编码不能为空",
+    "applicableDataType": "trial_balance",
+    "condition": {
+      "field": "accountCode",
+      "operator": "isEmpty"
+    },
+    "severity": "error",
+    "outputAction": "flag_anomaly",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "DF-001",
+    "ruleName": "日期格式校验",
+    "ruleCategory": "data_format",
+    "description": "凭证日期必须为有效日期且在合理范围（1990-01-01 至今）",
+    "applicableDataType": "journal",
+    "condition": {
+      "field": "voucherDate",
+      "operator": "invalidDate"
+    },
+    "severity": "error",
+    "outputAction": "flag_anomaly",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "DF-002",
+    "ruleName": "金额字段为数值",
+    "ruleCategory": "data_format",
+    "description": "借方和贷方金额必须为有效数值",
+    "applicableDataType": "journal",
+    "condition": {
+      "field": "debit",
+      "operator": "isNotNumber"
+    },
+    "severity": "error",
+    "outputAction": "flag_anomaly",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "BD-001",
+    "ruleName": "余额方向异常 - 应收账款贷方余额",
+    "ruleCategory": "balance_direction",
+    "description": "应收账款科目（1122）正常应为借方余额，出现贷方余额需关注",
+    "applicableDataType": "trial_balance",
+    "condition": {
+      "field": "accountCode",
+      "operator": "startsWith",
+      "value": "1122",
+      "additional": {
+        "field": "endCredit",
+        "operator": "greaterThan",
+        "value": 0
+      }
+    },
+    "severity": "warning",
+    "outputAction": "flag_anomaly",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "BD-002",
+    "ruleName": "余额方向异常 - 应付账款借方余额",
+    "ruleCategory": "balance_direction",
+    "description": "应付账款科目（2202）正常应为贷方余额，出现借方余额需关注",
+    "applicableDataType": "trial_balance",
+    "condition": {
+      "field": "accountCode",
+      "operator": "startsWith",
+      "value": "2202",
+      "additional": {
+        "field": "endDebit",
+        "operator": "greaterThan",
+        "value": 0
+      }
+    },
+    "severity": "warning",
+    "outputAction": "flag_anomaly",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "RC-001",
+    "ruleName": "凭证借贷平衡校验",
+    "ruleCategory": "reconciliation",
+    "description": "同一凭证的借方合计必须等于贷方合计",
+    "applicableDataType": "voucher",
+    "condition": {
+      "field": "difference",
+      "operator": "notEqualZero",
+      "tolerance": 0.005
+    },
+    "severity": "error",
+    "outputAction": "flag_anomaly",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "RC-002",
+    "ruleName": "期初期末滚动校验",
+    "ruleCategory": "reconciliation",
+    "description": "期初余额 + 本期净发生额 = 期末余额（容差0.01元）",
+    "applicableDataType": "trial_balance",
+    "condition": {
+      "operator": "rollForwardFailed",
+      "tolerance": 0.01
+    },
+    "severity": "error",
+    "outputAction": "flag_anomaly",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "RC-003",
+    "ruleName": "余额表与序时账勾稽",
+    "ruleCategory": "reconciliation",
+    "description": "同一科目的余额表本期发生额与序时账合计存在差异",
+    "applicableDataType": "cross",
+    "condition": {
+      "operator": "reconcileDifference",
+      "tolerance": 0.01
+    },
+    "severity": "error",
+    "outputAction": "report_diff",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "AN-001",
+    "ruleName": "借贷同时有值异常",
+    "ruleCategory": "anomaly_detection",
+    "description": "同一分录行借方和贷方同时有非零值，数据异常",
+    "applicableDataType": "journal",
+    "condition": {
+      "operator": "bothDebitCreditNonZero"
+    },
+    "severity": "error",
+    "outputAction": "flag_anomaly",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "AN-002",
+    "ruleName": "借贷同时为空异常",
+    "ruleCategory": "anomaly_detection",
+    "description": "同一分录行借方和贷方均为空或零，无效分录",
+    "applicableDataType": "journal",
+    "condition": {
+      "operator": "bothDebitCreditZero"
+    },
+    "severity": "error",
+    "outputAction": "flag_anomaly",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "AN-003",
+    "ruleName": "期末入账风险",
+    "ruleCategory": "anomaly_detection",
+    "description": "凭证日期为月末最后5天，存在截止期测试风险",
+    "applicableDataType": "journal",
+    "condition": {
+      "field": "voucherDate",
+      "operator": "isPeriodEnd",
+      "value": 5
+    },
+    "severity": "info",
+    "outputAction": "flag_risk",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "AN-004",
+    "ruleName": "非工作日入账",
+    "ruleCategory": "anomaly_detection",
+    "description": "凭证日期为周六或周日，需关注录入合理性",
+    "applicableDataType": "journal",
+    "condition": {
+      "field": "voucherDate",
+      "operator": "isWeekend"
+    },
+    "severity": "warning",
+    "outputAction": "flag_risk",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "AN-005",
+    "ruleName": "摘要含敏感关键词",
+    "ruleCategory": "anomaly_detection",
+    "description": "摘要含[暂估][冲销][调整][重分类][补提]等词，需重点关注",
+    "applicableDataType": "journal",
+    "condition": {
+      "field": "summary",
+      "operator": "containsKeywords",
+      "value": ["暂估", "冲销", "调整", "重分类", "补提", "更正", "错账"]
+    },
+    "severity": "warning",
+    "outputAction": "flag_risk",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "SP-001",
+    "ruleName": "重大项目抽样",
+    "ruleCategory": "sampling",
+    "description": "金额超过重要性水平的凭证应全部纳入样本",
+    "applicableDataType": "journal",
+    "condition": {
+      "operator": "amountGreaterThanMateriality"
+    },
+    "severity": "info",
+    "outputAction": "include_in_sample",
+    "humanReviewRequired": true
+  },
+  {
+    "ruleId": "OT-001",
+    "ruleName": "结果输出人工复核标注",
+    "ruleCategory": "output_template",
+    "description": "所有系统生成的结果表和说明均须附加[以下内容为系统生成草稿，需项目组复核后使用]标注",
+    "applicableDataType": "all",
+    "condition": {
+      "operator": "always"
+    },
+    "severity": "info",
+    "outputAction": "append_review_disclaimer",
+    "humanReviewRequired": true
+  }
+]
