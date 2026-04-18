@@ -5,7 +5,28 @@ import path from 'path';
 // https://vitejs.dev/config/
 export default defineConfig({
   base: process.env.VITE_BASE_URL ?? '/',
-  plugins: [react()],
+  plugins: [
+    react(),
+    // In production builds, replace the CDN office.js reference with a locally bundled copy
+    (() => {
+      let isBuild = false;
+      return {
+        name: 'local-office-js',
+        configResolved(config: { command: string }) {
+          isBuild = config.command === 'build';
+        },
+        transformIndexHtml(html: string) {
+          if (isBuild) {
+            return html.replace(
+              /src="https:\/\/appsforoffice\.microsoft\.com\/lib\/[^"]+\/hosted\/office\.js"/,
+              'src="/office.js"'
+            );
+          }
+          return html;
+        },
+      };
+    })(),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),

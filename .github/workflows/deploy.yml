@@ -2,25 +2,15 @@ name: 构建并发布
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*.*.*'
 
-# 允许 GitHub Pages 部署
 permissions:
   contents: write
-  pages: write
-  id-token: write
-
-# 同时只允许一个部署，不取消正在进行的部署
-concurrency:
-  group: pages
-  cancel-in-progress: false
 
 jobs:
-  # ─── 构建 ────────────────────────────────────────────────────
-  build:
+  # ─── 构建并创建离线 Release ────────────────────────────────────
+  release:
     runs-on: ubuntu-latest
     steps:
       - name: 检出代码
@@ -35,40 +25,26 @@ jobs:
       - name: 安装依赖
         run: npm ci
 
-      - name: 构建（生产）
+      - name: 构建（生产，base 为 /）
         run: npm run build
-        env:
-          VITE_BASE_URL: /LW-Audittools/
 
-      # 将 manifest.prod.xml 一并放入 dist，方便 Pages 访问
-      - name: 拷贝生产 manifest 到 dist
-        run: cp manifest.prod.xml dist/manifest.xml
+      - name: 下载 office.js 到 dist（离线打包）
+        run: |
+          curl -fsSL \
+            "https://appsforoffice.microsoft.com/lib/1/hosted/office.js" \
+            -o dist/office.js
 
-      - name: 上传 Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-  # ─── 部署到 GitHub Pages（每次推送 main 或 tag 均执行）─────────
-  deploy-pages:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: 部署到 GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-  # ─── 创建 Release（仅在推送 tag 时执行）──────────────────────
-  release:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
+      - name: 打包离线发布包
+        run: |
+          PKG="LW-Audittools-${{ github.ref_name }}-offline"
+          mkdir -p "$PKG"
+          cp -r dist            "$PKG/"
+          cp server.js          "$PKG/"
+          cp manifest-local.xml "$PKG/"
+          cp start.bat          "$PKG/"
+          cp start.sh           "$PKG/"
+          chmod +x "$PKG/start.sh"
+          zip -r "${PKG}.zip" "$PKG/"
 
       - name: 创建 GitHub Release
         uses: softprops/action-gh-release@v2
@@ -77,16 +53,16 @@ jobs:
           body: |
             ## LW 审计工具箱 ${{ github.ref_name }}
 
-            ### 安装方法（一键旁加载）
+            ### 离线安装方法（无需联网）
 
-            1. 下载下方附件中的 `manifest.xml`
-            2. 打开 **Excel**（桌面版，需要联网）
-            3. 依次点击：**文件 → 选项 → 信任中心 → 信任中心设置 → 受信任的加载项目录**
-               - 或者使用旁加载快捷方式（见 README 详细说明）
-            4. 在 Excel 的"开发工具"选项卡 → **Office 加载项 → 管理我的加载项 → 上传我的加载项**，选择下载的 `manifest.xml`
-            5. 插件加载后，在"开始"选项卡中会出现 **"LW 审计工具"** 按钮组，点击"打开审计工具箱"即可使用
+            1. 下载附件中的 `LW-Audittools-${{ github.ref_name }}-offline.zip` 并解压到任意目录
+            2. 确保已安装 [Node.js](https://nodejs.org)（LTS 版本即可）
+            3. **Windows**：双击 `start.bat`；**macOS / Linux**：运行 `bash start.sh`
+            4. 看到 `✓ 本地服务已启动` 后，**保持该窗口运行**
+            5. 打开 **Excel** → **插入** → **加载项** → **上传我的加载项**，选择解压目录中的 `manifest-local.xml`
+            6. 点击"开始"选项卡 → **"打开审计工具箱"** 即可使用
 
-            > 插件前端托管于 GitHub Pages，无需本地服务器，保持联网即可使用。
+            > 插件所有代码均在本地运行，无需联网。每次打开 Excel 使用插件前，需先启动本地服务（运行 `start.bat` / `start.sh`）。
 
             ### 功能列表
 
@@ -94,17 +70,17 @@ jobs:
             |------|------|
             | 项目概览 | 设置客户/期间/操作者，查看数据统计 |
             | 数据导入 | 扫描工作簿，识别序时账与科目余额表 |
-            | 🆕 字段映射 | 查看/调整自动识别的字段映射，一键触发完整数据导入 |
-            | 🆕 数据清洗 | 查看清洗操作日志：规则汇总、错误明细、向下填充记录 |
-            | 🆕 序时账分析 | 科目发生额汇总、月度趋势、异常分录列表，借贷平衡验证 |
-            | 🆕 科目余额表 | 余额方向推断、期末余额展示、勾稽状态及异常标注 |
-            | 🆕 联查凭证 | 按科目/凭证号/单据号穿透联查，相似凭证、冲销对检测 |
+            | 字段映射 | 查看/调整自动识别的字段映射，一键触发完整数据导入 |
+            | 数据清洗 | 查看清洗操作日志：规则汇总、错误明细、向下填充记录 |
+            | 序时账分析 | 科目发生额汇总、月度趋势、异常分录列表，借贷平衡验证 |
+            | 科目余额表 | 余额方向推断、期末余额展示、勾稽状态及异常标注 |
+            | 联查凭证 | 按科目/凭证号/单据号穿透联查，相似凭证、冲销对检测 |
             | 一键抽凭 | 系统抽样 / 货币单元抽样 / 随机抽样 |
             | 勾稽校验 | 验证序时账与余额表借贷平衡 |
             | 底稿输出 | 输出审计底稿到新工作表 |
             | 审计日志 | 全程操作留痕，支持导出 |
-            | 🆕 系统设置 | 配置重要性水平、合计行关键词、风险摘要关键词、随机种子 |
+            | 系统设置 | 配置重要性水平、合计行关键词、风险摘要关键词、随机种子 |
 
             完整使用说明请查阅 [README](https://github.com/leeviswhitman/LW-Audittools/blob/main/README.md)。
-          files: manifest.prod.xml
+          files: LW-Audittools-${{ github.ref_name }}-offline.zip
           token: ${{ secrets.GITHUB_TOKEN }}
